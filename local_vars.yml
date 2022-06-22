@@ -1,0 +1,24 @@
+nvidia_version: 515.48.07
+dnf_packages_list:
+  - geany
+  - snapd
+  - code
+  - fedora-workstation-repositories
+  - google-chrome-stable
+  - ncdu
+  - atop
+  - inxi
+  - ntfs-3g
+  - fuse
+  - git
+  - zathura
+
+
+snap_packages_list:
+  - name: krita
+  - name: mailspring
+  - name: pdfmixtool
+  - name: telegram-desktop
+  - name: slack
+  - name: audio-recorder
+    channel: beta

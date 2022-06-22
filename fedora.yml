@@ -1,0 +1,178 @@
+---
+- name: Fedora cinnamon playbook
+  become: yes
+  connection: local
+  gather_facts: true
+  hosts: all
+  vars_files:
+    - ./local_vars.yml
+  tasks:
+
+  - name: get the username running the deploy
+    become: false
+    local_action: command whoami
+    register: username_on_the_host
+    changed_when: false
+
+  - name: Disable SELinux
+    ansible.posix.selinux:
+      state: disabled
+    register: os_reboot
+
+  - name: Check if seliux -> restart OS
+    debug:
+      msg: "Server needs to be restarted, rebooting"
+    when: os_reboot is changed
+
+  - name: Install fedora-workstation-repositories package
+    dnf:
+      name: fedora-workstation-repositories
+      state: present
+
+  - name: import key for vs code ms repo add
+    ansible.builtin.rpm_key:
+      state: present
+      key: "https://packages.microsoft.com/keys/microsoft.asc"
+
+  - name: DNF Install repo for ffmpeg
+    dnf:
+      name:   https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_distribution_major_version }}.noarch.rpm
+      disable_gpg_check: yes
+      state: present
+
+  # - name: DNF Install repo for ffmpeg
+  #   dnf:
+  #     name: "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_distribution_major_version }}.noarch.rpm"
+  #     disable_gpg_check: yes
+  #     state: present
+
+  - name: DNF Install packages ffmpeg
+    dnf:
+      name: "{{ item }}"
+      # update_cache: yes
+    loop:
+    - ffmpeg
+    - ffmpeg-devel
+
+  - name: VS Code repo file add
+    ansible.builtin.copy:
+      src: files/vscode.repo
+      dest: /etc/yum.repos.d/vscode.repo
+
+  - name: enable repository google-chrome
+    ansible.builtin.command:
+      cmd: dnf config-manager --set-enabled google-chrome
+    changed_when: false
+
+  - name: Get DNF Repolist
+    ansible.builtin.command: dnf repolist enabled
+    register: repolist
+    changed_when: false
+
+  - name: print repolist
+    debug:
+      var: repolist.stdout_lines
+    changed_when: false
+
+  - name: DNF Remove not needed packages
+    dnf:
+      name: "{{ item }}"
+      state: absent
+    loop:
+    - dnfdragora
+    - dnfdragora-updater
+
+  - name: DNF Install packages from the list
+    dnf:
+      name: "{{ item }}"
+      # update_cache: yes
+      state: present
+    loop: "{{ dnf_packages_list|flatten(levels=1) }}"
+    tags: [ dnf ]
+
+  - name: Upgrade all packages
+    dnf:
+      name: "*"
+      exclude: "kernel*"
+      state: latest
+
+  - name: "Allow my user {{ username_on_the_host.stdout }} to run without passwd"
+    community.general.sudoers:
+      name: "{{ username_on_the_host.stdout }}-sudo"
+      state: present
+      user: "{{ username_on_the_host.stdout }}"
+      commands: ALL
+      nopassword: true
+
+  - name: kubectl version
+    uri:
+      url: https://dl.k8s.io/release/stable.txt
+      return_content: yes
+    register: kubectl_stable
+
+  - file:
+      state: directory
+      dest: "/home/{{ username_on_the_host.stdout }}/bin"
+
+  - name: download kubectl
+    uri:
+      url: "https://dl.k8s.io/release/{{ kubectl_stable.content }}/bin/linux/amd64/kubectl"
+      dest: "/home/{{ username_on_the_host.stdout }}/bin/kubectl"
+      mode: u+rwx
+    ignore_errors: yes
+    become: false
+
+  - name: get kubectl current version installed
+    become: false
+    shell: "kubectl version --client=true --output=json | jq -r '.clientVersion.gitVersion'"
+    register: kubectl_current
+    changed_when: false
+
+  - debug: var={{ kubectl_current.stdout }}
+
+  - debug:
+      msg: "UPDATE NEEDED !!! Kubectl {{ kubectl_stable.content }} is newer than {{ kubectl_current.stdout }} current!"
+    when: kubectl_stable.content is version(kubectl_current.stdout, '>')
+
+  - name: Add proper bash history config file
+    ansible.builtin.copy:
+      src: files/bash_history.sh
+      dest: /etc/profile.d/bash_history.sh
+
+  - name: download nvidia
+    uri:
+      url: "https://us.download.nvidia.com/XFree86/Linux-x86_64/{{ nvidia_version }}/NVIDIA-Linux-x86_64-{{ nvidia_version }}.run"
+      dest: "/root/"
+      mode: u+rwx
+    ignore_errors: yes
+    tags: [ never, nvidia ]
+
+  - name: add blacklist nouveau
+    copy:
+      dest: /etc/modprobe.d/blacklist.conf
+      content: "blacklist nouveau"
+    tags: [ never, nvidia ]
+
+  - name: default grub replace
+    ansible.builtin.replace:
+      path: /etc/default/grub
+      regexp: '(^GRUB_CMDLINE_LINUX.*rhgb quiet)\s*\"'
+      replace: '\1 rd.driver.blacklist=nouveau"'
+    tags: [ never, nvidia ]
+
+  - name: video acceleration drivers
+    dnf:
+      name: "{{ item }}"
+      state: present
+    loop:
+    - vdpauinfo
+    - libva-vdpau-driver
+    - libva-utils
+    tags: [ never, nvidia ]
+
+  - name: Install snap packages
+    snap:
+      name: "{{ item.name }}"
+      state: present
+      channel: "{{ item.channel | default('stable') }}"
+    loop: "{{ snap_packages_list|flatten(levels=2) }}"
