@@ -13,6 +13,10 @@ dnf_packages_list:
   - git
   - zathura
   - hdparm
+  - mpv
+  - vlc
+  - ffmpeg
+  - ffmpeg-devel
 
 
 snap_packages_list:
