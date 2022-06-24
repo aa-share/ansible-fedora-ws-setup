@@ -17,6 +17,9 @@ dnf_packages_list:
   - vlc
   - ffmpeg
   - ffmpeg-devel
+  - ncftp
+  - android-tools
+  - lshw
 
 
 snap_packages_list:
