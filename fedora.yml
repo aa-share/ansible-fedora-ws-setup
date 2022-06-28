@@ -13,6 +13,7 @@
     local_action: command whoami
     register: username_on_the_host
     changed_when: false
+    tags: [ docker ]
 
   - name: Disable SELinux
     ansible.posix.selinux:
@@ -74,17 +75,16 @@
 
   - name: DNF Install packages from the list
     dnf:
-      name: "{{ item }}"
+      name: "{{ dnf_packages_list | join(', ') }}"
       update_cache: "{{ dnf_upd_cache | default('no')}}"
       state: present
-    loop: "{{ dnf_packages_list|flatten(levels=1) }}"
     tags: [ dnf ]
 
   - name: Upgrade all packages
     dnf:
-      name: "*"
+      name: '*'
       update_cache: "{{ dnf_upd_cache | default('no')}}"
-      exclude: "kernel*"
+      exclude: '*kernel*'
       state: latest
     tags: [ dnf, upd ]
 
@@ -224,6 +224,41 @@
       state: present
       channel: "{{ item.channel | default('stable') }}"
     loop: "{{ snap_packages_list|flatten(levels=2) }}"
+
+  - name: Remove older versions of Docker
+    dnf:
+      name: "{{ old_docker_list | join(', ') }}"
+      state: absent
+    tags: [ old-docker, never ]
+
+  - name: "Enable repository docker.com/linux/fedora/docker-ce"
+    ansible.builtin.command:
+      cmd: dnf config-manager --add-repo
+           https://download.docker.com/linux/fedora/docker-ce.repo
+    changed_when: false
+    tags: [ docker, never ]
+
+  - name: DNF Install Docker Engine
+    dnf:
+      name: [docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin]
+      update_cache: "{{ dnf_upd_cache | default('no')}}"
+      state: present
+    tags: [ docker, never ]
+
+  - name: "Add the user {{ username_on_the_host.stdout }} to the docker group"
+    ansible.builtin.user:
+      name: "{{ username_on_the_host.stdout }}"
+      groups: docker
+      append: yes
+    register: user_docker_group
+    tags: [ docker, never ]
+
+  - name: Apply new docker group
+    ansible.builtin.command: newgrp docker
+    when:
+    - user_docker_group is defined
+    - user_docker_group is changed
+    tags: [ docker ]
 
   - name: Check if seliux -> restart OS
     debug:

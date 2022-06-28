@@ -20,7 +20,7 @@ dnf_packages_list:
   - ncftp
   - android-tools
   - lshw
-
+  - qbittorrent
 
 snap_packages_list:
   - name: krita
@@ -30,3 +30,15 @@ snap_packages_list:
   - name: slack
   - name: audio-recorder
     channel: beta
+
+old_docker_list:
+  - docker
+  - docker-client
+  - docker-client-latest
+  - docker-common
+  - docker-latest
+  - docker-latest-logrotate
+  - docker-logrotate
+  - docker-selinux
+  - docker-engine-selinux
+  - docker-engine
