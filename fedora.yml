@@ -8,17 +8,18 @@
     - ./local_vars.yml
   tasks:
 
-  - name: get the username running the deploy
+  - name: Get the username running the ansible playbook
     become: false
     local_action: command whoami
     register: username_on_the_host
     changed_when: false
-    tags: [ docker ]
+    tags: [ always, docker ]
 
   - name: Disable SELinux
     ansible.posix.selinux:
       state: disabled
     register: os_reboot
+    tags: [ only ]
 
   - name: Install fedora-workstation-repositories package
     dnf:
@@ -58,11 +59,6 @@
   - name: Get DNF Repolist
     ansible.builtin.command: dnf repolist enabled
     register: repolist
-    changed_when: false
-
-  - name: print repolist
-    debug:
-      var: repolist.stdout_lines
     changed_when: false
 
   - name: DNF Remove not needed packages
@@ -260,7 +256,17 @@
     - user_docker_group is changed
     tags: [ docker ]
 
-  - name: Check if seliux -> restart OS
+  post_tasks:
+  - name: print repolist
     debug:
-      msg: "Server needs to be restarted, rebooting"
-    when: os_reboot is changed
+      var: repolist.stdout_lines
+    changed_when: false
+
+  - name: Check if seliux -> reboot OS
+    ansible.builtin.command: shutdown -r 1
+    when:
+    - os_reboot.warnings is defined
+    - os_reboot.warnings is search("Reboot is required")
+    - ('Server needs to be rebooted...' | warn_me())
+    - ('REBOOTING SERVER in one minute...' | warn_me())
+    - ('Abort now with "shutdown -c"' | warn_me())
