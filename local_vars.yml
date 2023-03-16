@@ -26,6 +26,9 @@ dnf_packages_list:
   - p7zip-plugins
   - openssl
   - hwinfo
+  - dnf-utils
+  - dnf-plugins-core
+  - rpmconf
 
 snap_packages_list:
   - name: krita

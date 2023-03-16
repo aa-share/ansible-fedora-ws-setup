@@ -101,6 +101,7 @@
   - file:
       state: directory
       dest: "/home/{{ username_on_the_host.stdout }}/bin"
+    become: false
 
   - name: download kubectl
     uri:
